@@ -60,3 +60,56 @@ MeuProjetoPele/
     ├── plot_metamerism.py
     ├── plot_w_curve.py
     └── validar_discretizacao_lut.py
+```
+---
+
+## 🚀 Como Executar
+
+### 1. Instalação e Configuração do Ambiente
+
+É altamente recomendado o uso de um ambiente virtual Python (`venv`).
+
+```bash
+# Clone o repositório
+git clone https://github.com/RafaJMS/MonteCarlo-Skin-GPU.git
+cd SeuRepositorio
+
+# Crie e ative o ambiente virtual
+python -m venv venv
+# No Windows:
+venv\Scripts\activate
+# No Linux/Mac:
+source venv/bin/activate
+
+# Instale as dependências
+pip install -r requirements.txt
+```
+
+*(Requisito de Hardware: Para usufruir da aceleração máxima, é necessária uma placa de vídeo NVIDIA compatível com CUDA e drivers atualizados. Caso não possua, o software mudará automaticamente para o modo CPU).*
+
+### 2. Gerando as LUTs (Look-Up Tables)
+
+Toda a geração de dados é controlada pelo `main_generator.py`. Basta abrir o arquivo, ajustar as constantes no final do script (se desejar gerar PNGs ou o arquivo Cube 3D) e executar:
+
+```bash
+python main_generator.py
+```
+
+### 3. Rodando as Análises e Gráficos
+
+Após gerar os dados brutos (`.csv`) com o script principal, você pode rodar as métricas de validação de forma instantânea:
+
+```bash
+python analysis/plot_w_curve.py
+python analysis/validar_discretizacao_lut.py
+# ... ou qualquer outro script da pasta analysis
+```
+
+---
+
+## 📜 Licença e Créditos
+
+Distribuído sob a licença MIT. 
+A física óptica implementada baseia-se nos princípios do **MCML (Monte Carlo for Multi-Layered media)** estabelecidos por L.H. Wang, S.L. Jacques e L. Zheng (1995), atualizados com coeficientes contemporâneos de absorção da pele humana.
+
+---
