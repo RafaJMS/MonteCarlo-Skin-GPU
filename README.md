@@ -40,7 +40,7 @@ Este projeto foi rigorosamente validado através de 8 testes científicos (os sc
 O projeto foi construído sob rigorosos padrões de engenharia de software para garantir modularidade e reutilização de código:
 
 ```text
-MeuProjetoPele/
+MonteCarlo-Skin-GPU/
 │
 ├── data/
 │   └── BiologicalParameters/       # Espectros base (CIE CMFs, Melanina, Hemoglobina, etc.)
