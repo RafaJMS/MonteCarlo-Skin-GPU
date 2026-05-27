@@ -1,0 +1,16 @@
+# --- Núcleo Matemático e de Dados ---
+numpy
+pandas
+scipy
+
+# --- Aceleração e Paralelismo ---
+numba
+
+# --- Imagens e Utilidades ---
+Pillow
+tqdm
+
+# --- Análise de Dados e Gráficos ---
+matplotlib
+seaborn
+scikit-image
