@@ -11,10 +11,6 @@ def spectrum_to_xyz(reflectance_spectrum, wavelengths_nm, illum_d65, cmf_x, cmf_
     return X * norm_factor, Y * norm_factor, Z * norm_factor
 
 def xyz_to_srgb(X, Y, Z, return_float=False):
-    """
-    Converte valores do espaço de cor CIE XYZ para o espaço padrão sRGB.
-    Pode retornar inteiros (0-255) para imagens, ou floats (0.0-1.0) para matrizes LUT (.cube).
-    """
     x, y, z_ = X / 100.0, Y / 100.0, Z / 100.0
     
     mat_xyz_to_rgb = np.array([[ 3.2404542, -1.5371385, -0.4985314],[-0.9692660,  1.8760108,  0.0415560],[ 0.0556434, -0.2040259,  1.0572252]
