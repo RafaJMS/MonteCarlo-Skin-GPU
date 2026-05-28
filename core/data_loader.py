@@ -1,4 +1,3 @@
-# --- START OF FILE core/data_loader.py ---
 import pandas as pd
 import numpy as np
 from scipy.interpolate import interp1d
@@ -77,4 +76,3 @@ def load_cie_cmf(path):
         print(f"Erro CRÍTICO: Arquivo CMF não encontrado em '{path}'"); raise
     except Exception as e: 
         print(f"Erro CRÍTICO ao carregar dados CMF de {path}: {e}"); raise
-# --- END OF FILE core/data_loader.py ---
