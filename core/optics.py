@@ -1,4 +1,3 @@
-# --- START OF FILE core/optics.py ---
 import numpy as np
 
 def get_tissue_optical_properties(
