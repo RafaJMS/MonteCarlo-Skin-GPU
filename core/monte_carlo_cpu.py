@@ -1,4 +1,3 @@
-# --- START OF FILE core/monte_carlo_cpu.py ---
 import numpy as np
 from numba import njit
 
@@ -15,7 +14,6 @@ def calculate_fresnel_cpu(n1, n2, cos_theta1):
     ratio = n1 / n2
     sin_theta2_sq = (ratio * ratio) * sin_theta1_sq
 
-    # Reflexão total interna
     if sin_theta2_sq >= 1.0: return 1.0
 
     cos_theta2 = np.sqrt(1.0 - sin_theta2_sq)
