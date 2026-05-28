@@ -5,6 +5,7 @@ scipy
 
 # --- Aceleração e Paralelismo ---
 numba
+numba-cuda[cu13]
 
 # --- Imagens e Utilidades ---
 Pillow
