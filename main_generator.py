@@ -1,5 +1,3 @@
-# --- START OF FILE main_generator.py ---
-# --- START OF FILE main_generator.py ---
 import time
 import math
 import numpy as np
@@ -9,10 +7,7 @@ from PIL import Image
 from tqdm import tqdm
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
-# --- ADICIONE ESTAS TRÊS LINHAS AQUI ---
-# Descobre a pasta exata onde o main_generator.py está salvo (a raiz do projeto)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-# Cria o caminho absoluto para a pasta de dados biológicos
 DATA_DIR = os.path.join(BASE_DIR, "data", "BiologicalParameters")
 
 from core.data_loader import load_spectral_data, load_cie_cmf
@@ -31,7 +26,6 @@ try:
 except Exception:
     pass
 
-# --- Parâmetros Físicos e Configurações ---
 N_PHOTONS = 100000
 DEFAULT_SO2 = 0.75
 DEFAULT_TEPI_MM = 0.25
@@ -129,20 +123,17 @@ class SkinSimulation:
     def _calculate_pixel_color(self, task_params):
         fmel, fblood, Bm, So2_sim, tepi_cm_sim, n_photons_sim, idx_Cm, idx_Ch, idx_Bm = task_params
         
-        # Pega as propriedades ópticas da Pele usando nossa nova função isolada no módulo optics.py
         mua_e, mus_e, mua_d, mus_d = get_tissue_optical_properties(
             self.wavelengths_nm, fmel, fblood, Bm, So2_sim,
             self.eu_ua_spec, self.pheo_ua_spec, self.hba_spec, self.hbo2a_spec,
             FMEL_REF, self.hb_molar_conc_in_blood, G_ANISOTROPY
         )
         
-        # Roteará para CPU ou GPU
         if self.mode == "GPU":
             spectrum = self._run_pixel_gpu(mua_e, mus_e, mua_d, mus_d, tepi_cm_sim, n_photons_sim)
         else:
             spectrum = self._run_pixel_cpu(mua_e, mus_e, mua_d, mus_d, tepi_cm_sim, n_photons_sim)
 
-        # Transforma o Espectro de luz em Cor RGB usando o módulo color_science.py
         X, Y, Z = spectrum_to_xyz(spectrum, self.wavelengths_nm, self.illum_d65, self.cmf_x, self.cmf_y, self.cmf_z, self.Y_white)
         r_int, g_int, b_int = xyz_to_srgb(X, Y, Z, return_float=False)
         r_fl, g_fl, b_fl = xyz_to_srgb(X, Y, Z, return_float=True)
@@ -158,9 +149,6 @@ class SkinSimulation:
         """Função unificada que gera a LUT (2D ou 3D)"""
         tepi_cm = DEFAULT_TEPI_MM / 10.0
         
-        # =======================================================
-        # MODO 2D: Calcula e salva um por um (3 barras de progresso)
-        # =======================================================
         if output_type == "2D":
             for b_idx, bm in enumerate(Bm_vals):
                 tasks =[]
@@ -183,26 +171,20 @@ class SkinSimulation:
                         try: results.append(self._calculate_pixel_color(t))
                         except Exception as e: print(f"Erro no pixel: {e}")
                 
-                # Ordena e salva PNG e CSV para este Bm
                 results.sort(key=lambda r: (r['idx_Ch'], r['idx_Cm']))
                 suffix = f"Bm_{bm:.2f}".replace('.', '_')
                 
-                # Salva Imagem
                 img = Image.new('RGB', (len(Cm_vals), len(Ch_vals)), color='black')
                 pixels = img.load()
                 for r in results:
                     pixels[r['idx_Cm'], r['idx_Ch']] = (r['R_int'], r['G_int'], r['B_int'])
                 img.save(f"lut_2D_{suffix}_{self.mode}.png")
                 
-                # Salva CSV
                 csv_path = f"lut_data_2D_{suffix}_{self.mode}.csv"
                 df = pd.DataFrame([{k: v for k, v in r.items() if k != 'rgb_float'} for r in results])
                 df.to_csv(csv_path, index=False)
                 print(f"Salvo: Imagem e CSV para Bm={bm:.2f}")
 
-        # =======================================================
-        # MODO 3D: Calcula tudo junto para formar o .cube
-        # =======================================================
         elif output_type == "3D":
             tasks =[]
             for b_idx, bm in enumerate(Bm_vals):
@@ -225,7 +207,6 @@ class SkinSimulation:
                     try: results.append(self._calculate_pixel_color(t))
                     except Exception as e: print(f"Erro no pixel: {e}")
             
-            # Ordena e salva CUBE e CSV Geral
             results.sort(key=lambda r: (r['idx_Bm'], r['idx_Ch'], r['idx_Cm']))
             
             cube_path = f"lut_3D_{self.mode}.cube"
