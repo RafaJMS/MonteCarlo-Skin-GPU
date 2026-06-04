@@ -54,10 +54,12 @@ def run_monte_carlo_cpu(
         alive = True
 
         while alive:
+            # 1. Definir o passo óptico
             xi = np.random.rand()
             while xi <= 0.0: xi = np.random.rand()
             s_opt = -np.log(xi)
 
+            # 2. Loop de Fronteiras (Movimenta o fóton até esgotar o passo)
             while s_opt > 0.0 and alive:
                 mut = mut_epi if current_layer_is_epi else mut_derm
                 tau_b = np.inf
@@ -84,96 +86,64 @@ def run_monte_carlo_cpu(
                             boundary_type = 2
 
                 if s_opt > tau_b:
-                    if boundary_type == 0 or tau_b == np.inf:
-                        step_cm = s_opt / (mut if mut > eps else 1.0)
-                        x += step_cm * ux; y += step_cm * uy; z += step_cm * uz
-                        s_opt = 0.0
-                        
-                        albedo = albedo_epi if current_layer_is_epi else albedo_derm
-                        W *= albedo
+                    step_cm = tau_b / (mut if mut > eps else 1.0)
+                    x += step_cm * ux; y += step_cm * uy; z += step_cm * uz
+                    s_opt -= tau_b
 
-                        rnd = np.random.rand()
-                        if abs(g_anisotropy) < 1e-12: cost = 2.0 * rnd - 1.0
+                    if boundary_type == 1:
+                        R_int = calculate_fresnel_cpu(mc_n_medium, mc_n_air, abs(uz))
+                        if np.random.rand() > R_int:
+                            total_reflectance_weight += W
+                            alive = False
+                            break
                         else:
-                            tmp = (1.0 - g_anisotropy * g_anisotropy) / (1.0 - g_anisotropy + 2.0 * g_anisotropy * rnd)
-                            cost = (1.0 + g_anisotropy * g_anisotropy - tmp * tmp) / (2.0 * g_anisotropy)
-                            if cost < -1.0: cost = -1.0
-                            elif cost > 1.0: cost = 1.0
-
-                        sint = np.sqrt(max(0.0, 1.0 - cost * cost))
-                        phi = 2.0 * mc_pi * np.random.rand()
-                        cphi = np.cos(phi); sphi = np.sin(phi)
-
-                        if abs(uz) > 0.99999:
-                            uxx = sint * cphi; uyy = sint * sphi; uzz = cost * (1.0 if uz > 0.0 else -1.0)
-                        else:
-                            denom = np.sqrt(max(0.0, 1.0 - uz * uz))
-                            uxx = sint * (ux * uz * cphi - uy * sphi) / denom + ux * cost
-                            uyy = sint * (uy * uz * cphi + ux * sphi) / denom + uy * cost
-                            uzz = -sint * cphi * denom + uz * cost
-
-                        norm = np.sqrt(uxx * uxx + uyy * uyy + uzz * uzz)
-                        if norm > 0.0:
-                            ux = uxx / norm; uy = uyy / norm; uz = uzz / norm
-                        else:
-                            ux = 0.0; uy = 0.0; uz = 1.0
-
-                        if W < mc_threshold:
-                            if np.random.rand() <= mc_chance: W /= mc_chance
-                            else:
-                                alive = False; break
-                    else:
-                        step_cm = tau_b / (mut if mut > eps else 1.0)
-                        x += step_cm * ux; y += step_cm * uy; z += step_cm * uz
-                        s_opt -= tau_b
-
-                        if boundary_type == 1:
-                            R_int = calculate_fresnel_cpu(mc_n_medium, mc_n_air, abs(uz))
-                            if np.random.rand() > R_int:
-                                total_reflectance_weight += W
-                                alive = False; break
-                            else:
-                                uz = -uz; z = 1e-12
-                        elif boundary_type == 2:
-                            current_layer_is_epi = not current_layer_is_epi
-                            if current_layer_is_epi: z = tepi_cm - 1e-12 if uz < 0.0 else tepi_cm + 1e-12
-                            else: z = tepi_cm + 1e-12 if uz > 0.0 else tepi_cm - 1e-12
+                            uz = -uz; z = 1e-12
+                    elif boundary_type == 2:
+                        current_layer_is_epi = not current_layer_is_epi
+                        if current_layer_is_epi: z = tepi_cm - 1e-12 if uz < 0.0 else tepi_cm + 1e-12
+                        else: z = tepi_cm + 1e-12 if uz > 0.0 else tepi_cm - 1e-12
                 else:
                     step_cm = s_opt / (mut if mut > eps else 1.0)
                     x += step_cm * ux; y += step_cm * uy; z += step_cm * uz
                     s_opt = 0.0
 
-                    albedo = albedo_epi if current_layer_is_epi else albedo_derm
-                    W *= albedo
+            if not alive:
+                break
 
-                    rnd = np.random.rand()
-                    if abs(g_anisotropy) < 1e-12: cost = 2.0 * rnd - 1.0
-                    else:
-                        tmp = (1.0 - g_anisotropy * g_anisotropy) / (1.0 - g_anisotropy + 2.0 * g_anisotropy * rnd)
-                        cost = (1.0 + g_anisotropy * g_anisotropy - tmp * tmp) / (2.0 * g_anisotropy)
-                        if cost < -1.0: cost = -1.0
-                        elif cost > 1.0: cost = 1.0
+            # 3. Absorção, Espalhamento (H-G) e Roleta - Isolados corretamente aqui
+            albedo = albedo_epi if current_layer_is_epi else albedo_derm
+            W *= albedo
 
-                    sint = np.sqrt(max(0.0, 1.0 - cost * cost))
-                    phi = 2.0 * mc_pi * np.random.rand()
-                    cphi = np.cos(phi); sphi = np.sin(phi)
+            rnd = np.random.rand()
+            if abs(g_anisotropy) < 1e-12: cost = 2.0 * rnd - 1.0
+            else:
+                tmp = (1.0 - g_anisotropy * g_anisotropy) / (1.0 - g_anisotropy + 2.0 * g_anisotropy * rnd)
+                cost = (1.0 + g_anisotropy * g_anisotropy - tmp * tmp) / (2.0 * g_anisotropy)
+                cost = min(max(cost, -1.0), 1.0)
 
-                    if abs(uz) > 0.99999:
-                        uxx = sint * cphi; uyy = sint * sphi; uzz = cost * (1.0 if uz > 0.0 else -1.0)
-                    else:
-                        denom = np.sqrt(max(0.0, 1.0 - uz * uz))
-                        uxx = sint * (ux * uz * cphi - uy * sphi) / denom + ux * cost
-                        uyy = sint * (uy * uz * cphi + ux * sphi) / denom + uy * cost
-                        uzz = -sint * cphi * denom + uz * cost
+            sint = np.sqrt(max(0.0, 1.0 - cost * cost))
+            phi = 2.0 * mc_pi * np.random.rand()
+            cphi = np.cos(phi); sphi = np.sin(phi)
 
-                    norm = np.sqrt(uxx * uxx + uyy * uyy + uzz * uzz)
-                    if norm > 0.0:
-                        ux = uxx / norm; uy = uyy / norm; uz = uzz / norm
-                    else:
-                        ux = 0.0; uy = 0.0; uz = 1.0
+            if abs(uz) > 0.99999:
+                uxx = sint * cphi; uyy = sint * sphi; uzz = cost * (1.0 if uz > 0.0 else -1.0)
+            else:
+                denom = np.sqrt(max(0.0, 1.0 - uz * uz))
+                uxx = sint * (ux * uz * cphi - uy * sphi) / denom + ux * cost
+                uyy = sint * (uy * uz * cphi + ux * sphi) / denom + uy * cost
+                uzz = -sint * cphi * denom + uz * cost
 
-                    if W < mc_threshold:
-                        if np.random.rand() <= mc_chance: W /= mc_chance
-                        else: alive = False; break
+            norm = np.sqrt(uxx * uxx + uyy * uyy + uzz * uzz)
+            if norm > 0.0:
+                ux = uxx / norm; uy = uyy / norm; uz = uzz / norm
+            else:
+                ux = 0.0; uy = 0.0; uz = 1.0
+
+            # Roleta Russa
+            if W < mc_threshold:
+                if np.random.rand() <= mc_chance:
+                    W /= mc_chance
+                else:
+                    alive = False
 
     return total_reflectance_weight / n_photons_mc if n_photons_mc > 0 else 0.0

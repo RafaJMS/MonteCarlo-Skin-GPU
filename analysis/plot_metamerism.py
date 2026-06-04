@@ -7,17 +7,18 @@ def run():
     print("--- Analisando Metamerismo (Ambiguidade RGB) ---")
     # 1. Descobre a pasta raiz do projeto (volta uma pasta a partir deste script)
     raiz_projeto = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    diretorio_atual = os.path.dirname(os.path.abspath(__file__))
     
     # 2. Monta o caminho absoluto para o CSV na raiz do projeto
-    csv_path_gpu = os.path.join(raiz_projeto, "lut_data_3D_GPU_step5.csv")
-    csv_path_cpu = os.path.join(raiz_projeto, "lut_data_3D_CPU_step5.csv")
+    csv_path_gpu = os.path.join(diretorio_atual, "lut_data_3D_GPU.csv")
+    csv_path_cpu = os.path.join(diretorio_atual, "lut_data_3D_CPU.csv")
     
     if os.path.exists(csv_path_gpu):
         csv_path = csv_path_gpu
     elif os.path.exists(csv_path_cpu):
         csv_path = csv_path_cpu
     else:
-        print(f"Erro: Nenhum arquivo CSV de LUT 3D encontrado na raiz ({raiz_projeto}).")
+        print(f"Erro: Nenhum arquivo CSV de LUT 3D encontrado no diretório atual ({diretorio_atual}).")
         print("Rode o main_generator.py em modo 3D primeiro.")
         return
 

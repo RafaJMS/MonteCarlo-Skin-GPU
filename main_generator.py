@@ -31,7 +31,7 @@ DEFAULT_SO2 = 0.75
 DEFAULT_TEPI_MM = 0.25
 WAVELENGTH_START = 380
 WAVELENGTH_END = 780
-WAVELENGTH_STEP = 10
+WAVELENGTH_STEP = 5
 G_ANISOTROPY = 0.9
 
 MC_PI = np.pi
@@ -76,38 +76,99 @@ class SkinSimulation:
         self.pheo_ua_spec = load_spectral_data(os.path.join(DATA_DIR, "pheomelanin_ua_data.csv"))(self.wavelengths_nm)
         
         if self.mode == "GPU":
-            self.threads_per_wl = 1024 
+            self.threads_per_wl = 2048
             self.total_threads = self.num_wls * self.threads_per_wl
             self.rng_states = create_xoroshiro128p_states(self.total_threads, seed=42)
-            print(f"CUDA Configurado: {self.num_wls} WLs, {self.threads_per_wl} threads/WL.")
+            
+            # Pré-aloca buffers uma única vez
+            self._gpu_out      = cuda.device_array(self.num_wls, dtype=np.float64)
+            self._gpu_mua_epi  = cuda.device_array(self.num_wls, dtype=np.float64)
+            self._gpu_mus_epi  = cuda.device_array(self.num_wls, dtype=np.float64)
+            self._gpu_mua_derm = cuda.device_array(self.num_wls, dtype=np.float64)
+            self._gpu_mus_derm = cuda.device_array(self.num_wls, dtype=np.float64)
+            
+            # Calcula configuração de blocos uma única vez
+            self._threads_per_block = 512
+            self._blocks_per_grid = (
+                self.total_threads + self._threads_per_block - 1
+            ) // self._threads_per_block
+            
+            import time
+            import warnings
+            from numba.core.errors import NumbaPerformanceWarning
+
+            configs = [
+                (512,  256),
+                (1024, 256),
+                (1024, 512),
+                (2048, 256),
+                (2048, 512),
+            ]
+            dummy = np.ones(self.num_wls, dtype=np.float64) * 0.1
+
+            melhor_tempo  = float('inf')
+            melhor_config = configs[0]
+
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=NumbaPerformanceWarning)
+                
+                for tpw, tpb in configs:
+                    total  = self.num_wls * tpw
+                    blocos = (total + tpb - 1) // tpb
+
+                    # Aquece
+                    self._run_pixel_gpu(dummy, dummy, dummy, dummy, 0.006, 1000)
+
+                    # Mede
+                    t0 = time.time()
+                    for _ in range(5):
+                        self._run_pixel_gpu(dummy, dummy, dummy, dummy, 0.025, 100000)
+                    tempo = (time.time() - t0) / 5
+
+                    print(f"threads_per_wl={tpw:4d}, threads_per_block={tpb}: {tempo:.4f}s/pixel  ({blocos} blocos)")
+
+                    if tempo < melhor_tempo:
+                        melhor_tempo  = tempo
+                        melhor_config = (tpw, tpb)
+
+            tpw_best, tpb_best = melhor_config
+            self.threads_per_wl     = tpw_best
+            self.total_threads      = self.num_wls * tpw_best
+            self._threads_per_block = tpb_best
+            self._blocks_per_grid   = (self.total_threads + tpb_best - 1) // tpb_best
+            self.rng_states         = create_xoroshiro128p_states(self.total_threads, seed=42)
+
+            print(f"\n-> Configuração selecionada: threads_per_wl={tpw_best}, threads_per_block={tpb_best} ({self._blocks_per_grid} blocos)")
             
         elif self.mode == "CPU":
-            # Aquecimento do JIT para CPU
             print("Aquecendo compilador JIT (CPU)...")
             _ = run_monte_carlo_cpu(0.1, 10.0, 0.1, 10.0, 0.006, 10, G_ANISOTROPY, MC_PI, MC_ALIVE, MC_DEAD, MC_THRESHOLD, MC_CHANCE, MC_N_MEDIUM, MC_N_AIR)
 
     def _run_pixel_gpu(self, mua_e, mus_e, mua_d, mus_d, tepi_cm, n_photons):
-        """Dispara as threads na Placa de Vídeo (Calcula todo o espectro em paralelo)"""
         photons_per_thread = math.ceil(n_photons / self.threads_per_wl)
         actual_photons_per_wl = photons_per_thread * self.threads_per_wl
-        
-        out_reflectance_gpu = cuda.to_device(np.zeros(self.num_wls, dtype=np.float64))
-        d_mua_epi = cuda.to_device(mua_e)
-        d_mus_epi = cuda.to_device(mus_e)
-        d_mua_derm = cuda.to_device(mua_d)
-        d_mus_derm = cuda.to_device(mus_d)
-        
-        threads_per_block = 256
-        blocks_per_grid = (self.total_threads + (threads_per_block - 1)) // threads_per_block
-        
-        monte_carlo_reflectance_kernel_batch[blocks_per_grid, threads_per_block](
-            out_reflectance_gpu, self.rng_states,
-            d_mua_epi, d_mus_epi, d_mua_derm, d_mus_derm, tepi_cm,
-            photons_per_thread, self.threads_per_wl, self.num_wls, G_ANISOTROPY,
-            MC_PI, MC_ALIVE, MC_DEAD, MC_THRESHOLD, MC_CHANCE, MC_N_MEDIUM, MC_N_AIR
+
+        # Zera e copia nos buffers pré-alocados — sem alocação nova
+        self._gpu_out[:] = 0.0
+        self._gpu_mua_epi.copy_to_device(mua_e)
+        self._gpu_mus_epi.copy_to_device(mus_e)
+        self._gpu_mua_derm.copy_to_device(mua_d)
+        self._gpu_mus_derm.copy_to_device(mus_d)
+
+        monte_carlo_reflectance_kernel_batch[
+            self._blocks_per_grid,
+            self._threads_per_block
+        ](
+            self._gpu_out, self.rng_states,
+            self._gpu_mua_epi, self._gpu_mus_epi,
+            self._gpu_mua_derm, self._gpu_mus_derm,
+            tepi_cm, photons_per_thread, self.threads_per_wl,
+            self.num_wls, G_ANISOTROPY,
+            MC_PI, MC_ALIVE, MC_DEAD, MC_THRESHOLD, MC_CHANCE,
+            MC_N_MEDIUM, MC_N_AIR
         )
         cuda.synchronize()
-        return out_reflectance_gpu.copy_to_host() / actual_photons_per_wl
+        return self._gpu_out.copy_to_host() / actual_photons_per_wl
 
     def _run_pixel_cpu(self, mua_e, mus_e, mua_d, mus_d, tepi_cm, n_photons):
         """Roda a simulação no Processador, iterando cada comprimento de onda."""
@@ -230,7 +291,7 @@ if __name__ == "__main__":
     ENGINE = "GPU"
     
     # 2. Escolha o output: "2D" ou "3D"
-    OUTPUT_FORMAT = "3D"
+    OUTPUT_FORMAT = "2D"
 
     start_time = time.time()
     

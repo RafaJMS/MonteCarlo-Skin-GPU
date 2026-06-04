@@ -11,7 +11,7 @@ def run():
     
     simulador = SkinSimulation(mode="GPU")
     
-    fmel, fblood, Bm = 0.00, 0.80, 0.50
+    fmel, fblood, Bm = 0.00, 0.02, 0.50
     tepi_cm = DEFAULT_TEPI_MM / 10.0
     
     from core.optics import get_tissue_optical_properties

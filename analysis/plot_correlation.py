@@ -8,7 +8,7 @@ def run():
     print("--- Analisando Correlação de Pearson ---")
     csv_path = "lut_data_3D_GPU_step5.csv"
     if not os.path.exists(csv_path):
-        csv_path = "lut_data_3D_CPU.csv"
+        csv_path = "lut_data_3D_GPU.csv"
         
     if not os.path.exists(csv_path):
         print(f"Erro: Nenhum arquivo CSV encontrado (nem GPU, nem CPU). Rode o main_generator.py em modo 3D primeiro.")
